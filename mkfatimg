@@ -1,0 +1,72 @@
+#!/bin/bash
+
+set -e
+
+if [ $# -ne 3 ]; then
+    echo "Usage: $(basename $0) BLOCK_SIZE BLOCK_COUNT IMAGE_NAME" >&2
+    exit 1
+fi
+
+BLOCK_SIZE=$1
+BLOCK_COUNT=$2 
+IMAGE_NAME=$3
+
+require_number () {
+    if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+        echo $2 >&2
+        exit 2
+    fi
+}
+
+require_number $BLOCK_SIZE "Error: BLOCK_SIZE require a number"
+require_number $BLOCK_COUNT "Error: BLOCK_COUNT require a number"
+
+OUTPUT_FILE="/mnt/output/$IMAGE_NAME"
+
+# remove output file if it exist
+test -f $OUTPUT_FILE && rm -f $OUTPUT_FILE
+
+# make empty image
+dd if=/dev/zero of=$OUTPUT_FILE bs=$BLOCK_SIZE count=$BLOCK_COUNT
+echo "*** Step 1: create empty image"
+
+# lookup loop
+LOOP=$(losetup -f)
+LOOPNUM=$(echo $LOOP | grep -o '[0-9]\+')
+echo "*** Step 2: found unused loop: '$LOOP'"
+
+# mknod
+if [ ! -b $LOOP ]; then
+    mknod $LOOP b 7 $LOOPNUM
+    echo "*** Step 3: mknod: '$LOOP'"
+fi
+
+# losetup
+losetup $LOOP $OUTPUT_FILE
+echo "*** Step 4: setup loop: '$LOOP'"
+
+# generate filesystem
+mkfs.vfat $LOOP
+echo "*** Step 5: make filesystem"
+
+# mount image
+test -d /mnt/tmp || mkdir /mnt/tmp
+mount $LOOP /mnt/tmp
+echo "*** Step 6: mount image"
+
+# copy files
+cp -r /mnt/input/* /mnt/tmp
+echo "*** Step 7: copy files to image"
+
+# sync
+sync
+
+# unmount image
+umount $LOOP
+echo "*** Step 8: umount image"
+
+# delete loop
+losetup -d $LOOP
+echo "*** Step 9: disassociate loop: '$LOOP'"
+
+echo "Congratulation, image generate succeed!"

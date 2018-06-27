@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -e
+
+if [ $# -ne 3 ]; then
+    echo "Usage: $(basename $0) BLOCK_SIZE BLOCK_COUNT IMAGE_NAME" >&2
+    exit 1
+fi
+
+BLOCK_SIZE=$1
+BLOCK_COUNT=$2 
+IMAGE_NAME=$3
+
+OLD_SUM=
+
+while true; do
+    sleep 1
+
+    # generate checksum
+    NEW_SUM=$(du --time --time-style=full-iso /mnt/input | sha1sum | awk '{print $1}')
+    if [[ $OLD_SUM != $NEW_SUM ]]; then
+        echo "Input directory is changed"
+        mkfatimg $BLOCK_SIZE $BLOCK_COUNT $IMAGE_NAME
+        OLD_SUM=$NEW_SUM
+    fi
+done
